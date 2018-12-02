@@ -129,17 +129,17 @@ def find_lane_pixels(binary_warped):
         # Identify window boundaries in x and y (and right and left)
         win_y_low = binary_warped.shape[0] - (window+1)*window_height
         win_y_high = binary_warped.shape[0] - window*window_height
-        ### TO-DO: Find the four below boundaries of the window ###
+        # Four below boundaries of the window #
         win_xleft_low = leftx_current - margin  # Update this
         win_xleft_high = leftx_current + margin  # Update this
         win_xright_low = rightx_current - margin  # Update this
         win_xright_high = rightx_current + margin  # Update this
         
         # Draw the windows on the visualization image
-        cv2.rectangle(out_img,(win_xleft_low,win_y_low),
-        (win_xleft_high,win_y_high),(0,255,0), 2) 
-        cv2.rectangle(out_img,(win_xright_low,win_y_low),
-        (win_xright_high,win_y_high),(0,255,0), 2)
+#         cv2.rectangle(out_img,(win_xleft_low,win_y_low),
+#         (win_xleft_high,win_y_high),(0,255,0), 2) 
+#         cv2.rectangle(out_img,(win_xright_low,win_y_low),
+#         (win_xright_high,win_y_high),(0,255,0), 2)
          # To Identify the nonzero pixels in x and y within the window
         good_left_inds = ((nonzeroy >= win_y_low) & (nonzeroy < win_y_high) & 
         (nonzerox >= win_xleft_low) &  (nonzerox < win_xleft_high)).nonzero()[0]
@@ -174,14 +174,14 @@ def find_lane_pixels(binary_warped):
     return leftx, lefty, rightx, righty, out_img
 
 
-def fit_polynomial(binary_warped,ym_per_pix,xm_per_pix):
+def fit_polynomial(binary_warped,ym_per_pix=1,xm_per_pix=1):
     # Find our lane pixels first
     leftx, lefty, rightx, righty, out_img = find_lane_pixels(binary_warped)
 
     ### TO-DO: Fit a second order polynomial to each using `np.polyfit` ###
     left_fit = np.polyfit(lefty*ym_per_pix,leftx*xm_per_pix,2)
     right_fit = np.polyfit(righty*ym_per_pix,rightx*xm_per_pix,2)
-
+    
     # Generate x and y values for plotting
     ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
     try:
@@ -199,8 +199,8 @@ def fit_polynomial(binary_warped,ym_per_pix,xm_per_pix):
     out_img[righty, rightx] = [0, 0, 255]
 
     # Plots the left and right polynomials on the lane lines
-    plt.plot(left_fitx, ploty, color='yellow')
-    plt.plot(right_fitx, ploty, color='yellow')
+    #plt.plot(left_fitx, ploty, color='yellow')
+    #plt.plot(right_fitx, ploty, color='yellow')
 
     return ploty,left_fit,right_fit,left_fitx,right_fitx
 
@@ -208,10 +208,10 @@ def measure_curvature_pixels(binary_warped,ploty,left_fit,right_fit):
     '''
     Calculates the curvature of polynomial functions in pixels.
     '''
-#     ym_per_pix = 30/720 # meters per pixel in y dimension
-#     xm_per_pix = 3.7/700 # meters per pixel in x dimension
+    ym_per_pix = 30/720 # meters per pixel in y dimension
+    xm_per_pix = 3.7/700 # meters per pixel in x dimension
     
-#     ploty, left_fit, right_fit = fit_polynomial(binary_warped,ym_per_pix,xm_per_pix)
+    ploty, left_fit, right_fit, _, _ = fit_polynomial(binary_warped,ym_per_pix,xm_per_pix)
     
     # Define y-value where we want radius of curvature
     # We'll choose the maximum y-value, corresponding to the bottom of the image
@@ -255,9 +255,10 @@ def advanced_lane_finding_pipeline(img):
     M,Minv = get_warp_matrices(img_size)
     warped = cv2.warpPerspective(undist, M, img_size,flags=cv2.INTER_LINEAR)
     binary_warped = gradient_color_threshold(warped)
-    ploty, left_fit, right_fit,left_fitx,right_fitx = fit_polynomial(binary_warped,ym_per_pix,xm_per_pix)
+    ploty, left_fit, right_fit,left_fitx,right_fitx = fit_polynomial(binary_warped)
     out_img = draw_lanes(undist,img_size,Minv,binary_warped,ploty,left_fitx,right_fitx)
     left_curverad, right_curverad = measure_curvature_pixels(binary_warped,ploty,left_fit,right_fit)
+    #print(str(left_curverad) + ' ' + str(right_curverad))
     return out_img
 
 def show_images(images, cols = 1, titles = None):
