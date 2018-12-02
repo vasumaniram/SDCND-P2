@@ -218,12 +218,12 @@ def measure_curvature_pixels(binary_warped,ploty,left_fit,right_fit):
     y_eval = np.max(ploty)
     
     # Calculation of R_curve (radius of curvature)#
-    left_curverad = np.power(1 + np.square((2 * left_fit[0] * y_eval) + left_fit[1]),3/2) / np.absolute(2 * left_fit[0])  
-    right_curverad = np.power(1 + np.square((2 * right_fit[0] * y_eval) + right_fit[1]),3/2) / np.absolute(2 * right_fit[0]) 
+    left_curverad = ((1 + (2*left_fit[0]*y_eval*ym_per_pix + left_fit[1])**2)**1.5) / np.absolute(2*left_fit[0])
+    right_curverad = ((1 + (2*right_fit[0]*y_eval*ym_per_pix + right_fit[1])**2)**1.5) / np.absolute(2*right_fit[0]) 
     
     return left_curverad, right_curverad
 
-def draw_lanes(undist,img_size,Minv,warped,ploty,left_fitx,right_fitx):
+def draw_lanes(undist,img_size,Minv,warped,ploty,left_fitx,right_fitx,left_curverad, right_curverad):
     # Create an image to draw the lines on
     warp_zero = np.zeros_like(warped).astype(np.uint8)
     color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
@@ -235,11 +235,14 @@ def draw_lanes(undist,img_size,Minv,warped,ploty,left_fitx,right_fitx):
 
     # Draw the lane onto the warped blank image
     cv2.fillPoly(color_warp, np.int_([pts]), (0,255, 0))
-
+    
     # Warp the blank back to original image space using inverse perspective matrix (Minv)
     newwarp = cv2.warpPerspective(color_warp, Minv, img_size) 
     # Combine the result with the original image
     result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
+    # Display the curvature values
+    curvature_text = 'Left Curve Rad. : ' + str(left_curverad) + ' mts   Right Curve Rad. : ' + str(right_curverad) + ' mts'
+    cv2.putText(result,curvature_text,(100,50), cv2.FONT_HERSHEY_SIMPLEX, 1,(0,0,255),2,cv2.LINE_AA)
     plt.imshow(result)
     return result
 
@@ -256,8 +259,8 @@ def advanced_lane_finding_pipeline(img):
     warped = cv2.warpPerspective(undist, M, img_size,flags=cv2.INTER_LINEAR)
     binary_warped = gradient_color_threshold(warped)
     ploty, left_fit, right_fit,left_fitx,right_fitx = fit_polynomial(binary_warped)
-    out_img = draw_lanes(undist,img_size,Minv,binary_warped,ploty,left_fitx,right_fitx)
     left_curverad, right_curverad = measure_curvature_pixels(binary_warped,ploty,left_fit,right_fit)
+    out_img = draw_lanes(undist,img_size,Minv,binary_warped,ploty,left_fitx,right_fitx,round(left_curverad), round(right_curverad))
     #print(str(left_curverad) + ' ' + str(right_curverad))
     return out_img
 
