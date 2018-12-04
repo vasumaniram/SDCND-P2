@@ -176,10 +176,10 @@ def find_lane_pixels(binary_warped):
     return leftx, lefty, rightx, righty, out_img
 
 
-def fit_polynomial(binary_warped,ym_per_pix=1,xm_per_pix=1):
+def fit_polynomial(binary_warped,leftx, lefty, rightx, righty,ym_per_pix=1,xm_per_pix=1):
     # Find our lane pixels first
-    leftx, lefty, rightx, righty, out_img = find_lane_pixels(binary_warped)
-
+    #leftx, lefty, rightx, righty, out_img = find_lane_pixels(binary_warped)
+    print('fit_polynomial')
     ### TO-DO: Fit a second order polynomial to each using `np.polyfit` ###
     left_fit = np.polyfit(lefty*ym_per_pix,leftx*xm_per_pix,2)
     right_fit = np.polyfit(righty*ym_per_pix,rightx*xm_per_pix,2)
@@ -197,8 +197,8 @@ def fit_polynomial(binary_warped,ym_per_pix=1,xm_per_pix=1):
 
     ## Visualization ##
     # Colors in the left and right lane regions
-    out_img[lefty, leftx] = [255, 0, 0]
-    out_img[righty, rightx] = [0, 0, 255]
+    # out_img[lefty, leftx] = [255, 0, 0]
+    # out_img[righty, rightx] = [0, 0, 255]
 
     # Plots the left and right polynomials on the lane lines
     #plt.plot(left_fitx, ploty, color='yellow')
@@ -206,14 +206,15 @@ def fit_polynomial(binary_warped,ym_per_pix=1,xm_per_pix=1):
 
     return ploty,left_fit,right_fit,left_fitx,right_fitx
 
-def measure_curvature_pixels(binary_warped,ploty,left_fit,right_fit):
+def measure_curvature_pixels(binary_warped,ploty,left_fit,right_fit,leftx, lefty, rightx, righty):
     '''
     Calculates the curvature of polynomial functions in pixels.
     '''
     ym_per_pix = 30/720 # meters per pixel in y dimension
     xm_per_pix = 3.7/700 # meters per pixel in x dimension
-    
-    ploty, left_fit, right_fit, _,_ = fit_polynomial(binary_warped,ym_per_pix,xm_per_pix)
+    print('measure_curvature_pixels')
+    print(str(leftx) + ' ' + str(lefty) + '  ' +  str(rightx) + '  ' + str(righty))
+    ploty, left_fit, right_fit, _,_ = fit_polynomial(binary_warped,leftx, lefty, rightx, righty,ym_per_pix,xm_per_pix)
     
     # Define y-value where we want radius of curvature
     # We'll choose the maximum y-value, corresponding to the bottom of the image
@@ -263,8 +264,9 @@ def pipeline(img):
     M,Minv = get_warp_matrices(img_size) # Warp matrices M and Minv for perspective transform and back
     warped = cv2.warpPerspective(undist, M, img_size,flags=cv2.INTER_LINEAR) # Warp perspective to change the perspective into Bird's eye view 
     binary_warped = gradient_color_threshold(warped) # Using the color and grandient thresholds to find the lane lines under different conditions
-    ploty, left_fit, right_fit,left_fitx,right_fitx = fit_polynomial(binary_warped) # Find the lanes from the binay image and fit the polynomial curve
-    left_curverad, right_curverad = measure_curvature_pixels(binary_warped,ploty,left_fit,right_fit) # Calculate the curvature radius of both left and right lane curves
+    leftx, lefty, rightx, righty, _ = find_lane_pixels(binary_warped)
+    ploty, left_fit, right_fit,left_fitx,right_fitx = fit_polynomial(binary_warped,leftx, lefty, rightx, righty) # Find the lanes from the binay image and fit the polynomial curve
+    left_curverad, right_curverad = measure_curvature_pixels(binary_warped,ploty,left_fit,right_fit,leftx, lefty, rightx, righty) # Calculate the curvature radius of both left and right lane curves
     out_img = draw_lanes(undist,img_size,Minv,binary_warped,ploty,left_fitx,right_fitx,round(left_curverad), round(right_curverad)) # Draw the lanes and the curvature radius on the image frame
     #print(str(left_curverad) + ' ' + str(right_curverad))
     return out_img
@@ -278,8 +280,9 @@ def pipeline_test(img,img_name):
     cv2.imwrite(os.path.join('output_images/warp_images',img_name),warped)
     binary_warped = gradient_color_threshold(warped) # Using the color and grandient thresholds to find the lane lines under different conditions
     cv2.imwrite(os.path.join('output_images/binary_images',img_name),binary_warped.astype('uint8') * 255)
-    ploty, left_fit, right_fit,left_fitx,right_fitx = fit_polynomial(binary_warped) # Find the lanes from the binay image and fit the polynomial curve
-    left_curverad, right_curverad = measure_curvature_pixels(binary_warped,ploty,left_fit,right_fit) # Calculate the curvature radius of both left and right lane curves
+    leftx, lefty, rightx, righty, _ = find_lane_pixels(binary_warped)
+    ploty, left_fit, right_fit,left_fitx,right_fitx = fit_polynomial(binary_warped,leftx, lefty, rightx, righty) # Find the lanes from the binay image and fit the polynomial curve
+    left_curverad, right_curverad = measure_curvature_pixels(binary_warped,ploty,left_fit,right_fit,leftx, lefty, rightx, righty) # Calculate the curvature radius of both left and right lane curves
     out_img = draw_lanes(undist,img_size,Minv,binary_warped,ploty,left_fitx,right_fitx,round(left_curverad), round(right_curverad)) # Draw the lanes and the curvature radius on the image frame
     #print(str(left_curverad) + ' ' + str(right_curverad))
     return out_img
@@ -291,17 +294,25 @@ def fit_poly(img_shape, leftx, lefty, rightx, righty):
     # Generate x and y values for plotting
     ploty = np.linspace(0, img_shape[0]-1, img_shape[0])
     # Calculating both polynomials using ploty, left_fit and right_fit
-    left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
-    right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
+#     left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
+#     right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
     
+    try:
+        left_fitx = np.poly1d(left_fit)(ploty)
+        right_fitx = np.poly1d(right_fit)(ploty)
+    except TypeError:
+        # Avoids an error if `left` and `right_fit` are still none or incorrect
+        print('The function failed to fit a line!')
+        left_fitx = 1*ploty**2 + 1*ploty
+        right_fitx = 1*ploty**2 + 1*ploty
     return left_fitx, right_fitx, ploty,left_fit,right_fit    
 
 def search_around_poly(binary_warped,left_fit,right_fit):
     # HYPERPARAMETER
     # Choose the width of the margin around the previous polynomial to search
     # The quiz grader expects 100 here, but feel free to tune on your own!
-    margin = 100
-
+    margin = 150
+    print('search_around_poly')
     # Grab activated pixels
     nonzero = binary_warped.nonzero()
     nonzeroy = np.array(nonzero[0])
@@ -326,7 +337,9 @@ def search_around_poly(binary_warped,left_fit,right_fit):
     
     # Fit new polynomials
     if leftx.size == 0 or lefty.size == 0 or rightx.size == 0 or righty.size == 0:
-        ploty, left_fit, right_fit,left_fitx,right_fitx = fit_polynomial(binary_warped) 
+        print('x r y size 0')
+        leftx, lefty, rightx, righty, _ = find_lane_pixels(binary_warped)
+        ploty, left_fit, right_fit,left_fitx,right_fitx = fit_polynomial(binary_warped,leftx, lefty, rightx, righty) 
     else:    
         left_fitx, right_fitx, ploty,left_fit,right_fit = fit_poly(binary_warped.shape, leftx, lefty, rightx, righty)
     
@@ -359,12 +372,13 @@ def search_around_poly(binary_warped,left_fit,right_fit):
     plt.plot(right_fitx, ploty, color='yellow')
     ## End visualization steps ##
     
-    return left_fitx, right_fitx, ploty,left_fit,right_fit
+    return left_fitx, right_fitx, ploty,left_fit,right_fit,leftx, lefty, rightx, righty,result
 
 from Line import Line
 left_line = Line()
 right_line = Line()
 def pipeline_smart(img):
+    import random
     ym_per_pix = 30/720 # meters per pixel in y dimension
     xm_per_pix = 3.7/700 # meters per pixel in x dimension
     undist = cv2.undistort(img,mtx,dist,None,mtx) # Undistoring the image frame
@@ -372,22 +386,29 @@ def pipeline_smart(img):
     M,Minv = get_warp_matrices(img_size) # Warp matrices M and Minv for perspective transform and back
     warped = cv2.warpPerspective(undist, M, img_size,flags=cv2.INTER_LINEAR) # Warp perspective to change the perspective into Bird's eye view 
     binary_warped = gradient_color_threshold(warped) # Using the color and grandient thresholds to find the lane lines under different conditions
-    print(left_line.current_fit)
-    print(right_line.current_fit)
+    img_name = str(random.randint(1,1001)) + '.jpg' 
+    cv2.imwrite(os.path.join('output_images/warp_images',img_name),warped)
+    cv2.imwrite(os.path.join('output_images/binary_images',img_name),binary_warped.astype('uint8') * 255)
+#     print(left_line.current_fit)
+#     print(right_line.current_fit)
+    window_img = None
     if left_line.current_fit is None or right_line.current_fit is None:
-#         print('inside 1')
-        ploty, left_fit, right_fit,left_fitx,right_fitx = fit_polynomial(binary_warped) # Find the lanes from the binay image and fit the polynomial curve
+        print('inside 1')
+        leftx, lefty, rightx, righty, _ = find_lane_pixels(binary_warped)
+        ploty, left_fit, right_fit,left_fitx,right_fitx = fit_polynomial(binary_warped,leftx, lefty, rightx, righty) # Find the lanes from the binay image and fit the polynomial curve
+        left_curverad, right_curverad = measure_curvature_pixels(binary_warped,ploty,left_fit,right_fit,leftx, lefty, rightx, righty) # Calculate the curvature radius of both left and right lane curves
     else:
-#         print('inside 2')
+        print('inside 2')
         left_fit = left_line.current_fit
         right_fit = right_line.current_fit
-        left_fitx, right_fitx, ploty,left_fit,right_fit = search_around_poly(binary_warped,left_fit,right_fit) 
+        left_fitx, right_fitx, ploty,left_fit,right_fit,leftx, lefty, rightx, righty,window_img = search_around_poly(binary_warped,left_fit,right_fit)
+        left_curverad, right_curverad = measure_curvature_pixels(binary_warped,ploty,left_fit,right_fit,leftx, lefty, rightx, righty) # Calculate the curvature radius of both left and right lane curves
     left_line.current_fit = left_fit
     right_line.current_fit = right_fit
-    left_curverad, right_curverad = measure_curvature_pixels(binary_warped,ploty,left_fit,right_fit) # Calculate the curvature radius of both left and right lane curves
-    out_img = draw_lanes(undist,img_size,Minv,binary_warped,ploty,left_fitx,right_fitx,round(left_curverad), round(right_curverad)) # Draw the lanes and the curvature radius on the image frame
+    if window_img is None:    
+        window_img = draw_lanes(undist,img_size,Minv,binary_warped,ploty,left_fitx,right_fitx,round(left_curverad), round(right_curverad)) # Draw the lanes and the curvature radius on the image frame
     #print(str(left_curverad) + ' ' + str(right_curverad))
-    return out_img
+    return window_img
 
 def show_images(images, cols = 1, titles = None):
     """Display a list of images in a single figure with matplotlib.
