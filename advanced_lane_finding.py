@@ -68,8 +68,8 @@ def color_threshold(img,thresh):
     binary[(S >= thresh[0]) & (S <= thresh[1])]=1
     return binary
 def gradient_color_threshold(img):
-    ksize = 15
-    S_binary = color_threshold(img,(80,240))
+    ksize = 11
+    S_binary = color_threshold(img,(110,250))
     _,_,S_channel = get_hls_channels(img)
     gradx = abs_sobel_thresh(S_channel, orient='x', sobel_kernel=ksize, thresh=(20, 100))
     combined = np.zeros_like(gradx)
@@ -77,16 +77,15 @@ def gradient_color_threshold(img):
     return combined
 
 def get_warp_matrices(img_size):
-    src = np.float32(
-        [[(img_size[0] / 2) - 55, img_size[1] / 2 + 100],
-        [((img_size[0] / 6) - 10), img_size[1]],
-        [(img_size[0] * 5 / 6) + 60, img_size[1]],
-        [(img_size[0] / 2 + 55), img_size[1] / 2 + 100]])
-    dst = np.float32(
-        [[(img_size[0] / 4), 0],
-        [(img_size[0] / 4), img_size[1]],
-        [(img_size[0] * 3 / 4), img_size[1]],
-        [(img_size[0] * 3 / 4), 0]])
+    src = np.float32([[  595,  450 ],
+            [  685,  450 ],
+            [ 1000,  660 ],
+            [  280,  660 ]])
+
+    dst = np.float32([[  300,    0 ],
+            [  980,    0 ],
+            [  980,  720 ],
+            [  300,  720 ]])
     M = cv2.getPerspectiveTransform(src,dst)
     Minv = cv2.getPerspectiveTransform(dst,src)
     return M,Minv
@@ -94,6 +93,15 @@ def hist(img):
     bottom_half = img[img.shape[0]//2:,:]
     histogram = np.sum(bottom_half,axis=0)
     return histogram
+def get_offset(img,xm_per_pix):
+    histogram = hist(img)
+    midpoint = np.int(histogram.shape[0]//2)
+    leftx_base = np.argmax(histogram[:midpoint])
+    rightx_base = np.argmax(histogram[midpoint:]) + midpoint
+    mid_x_base =  (rightx_base + leftx_base) / 2
+    image_center = img.shape[1]/2
+    offset = np.absolute(image_center - mid_x_base) * xm_per_pix
+    return offset
 def find_lane_pixels(binary_warped):
     histogram = hist(binary_warped)
     # Create an output image to draw on and visualize the result
@@ -101,18 +109,15 @@ def find_lane_pixels(binary_warped):
     midpoint = np.int(histogram.shape[0]//2)
     leftx_base = np.argmax(histogram[:midpoint])
     rightx_base = np.argmax(histogram[midpoint:]) + midpoint
-    mid_x_base =  rightx_base - leftx_base
-    image_center = binary_warped[1]/2
-    offset = image_center - mid_x_base
-    # HYPERPARAMETERS
-    # Choose the number of sliding windows
+  
+    # Choosing the number of sliding windows
     nwindows = 9
-    # Set the width of the windows +/- margin
-    margin = 100
-    # Set minimum number of pixels found to recenter window
+    # Setting the width of the windows +/- margin
+    margin = 80
+    # Setting minimum number of pixels found to recenter window
     minpix = 50
 
-    # Set height of windows - based on nwindows above and image shape
+    # Setting height of windows - based on nwindows above and image shape
     window_height = np.int(binary_warped.shape[0]//nwindows)
     # Identify the x and y positions of all nonzero pixels in the image
     nonzero = binary_warped.nonzero()
@@ -137,7 +142,7 @@ def find_lane_pixels(binary_warped):
         win_xright_low = rightx_current - margin  # Update this
         win_xright_high = rightx_current + margin  # Update this
         
-        # Draw the windows on the visualization image
+        #Draw the windows on the visualization image
 #         cv2.rectangle(out_img,(win_xleft_low,win_y_low),
 #         (win_xleft_high,win_y_high),(0,255,0), 2) 
 #         cv2.rectangle(out_img,(win_xright_low,win_y_low),
@@ -172,6 +177,10 @@ def find_lane_pixels(binary_warped):
     lefty = nonzeroy[left_lane_inds] 
     rightx = nonzerox[right_lane_inds]
     righty = nonzeroy[right_lane_inds]
+    ## Visualization ##
+    # Colors in the left and right lane regions
+#     out_img[lefty, leftx] = [255, 0, 0]
+#     out_img[righty, rightx] = [0, 0, 255]
 
     return leftx, lefty, rightx, righty, out_img
 
@@ -179,12 +188,11 @@ def find_lane_pixels(binary_warped):
 def fit_polynomial(binary_warped,leftx, lefty, rightx, righty,ym_per_pix=1,xm_per_pix=1):
     # Find our lane pixels first
     #leftx, lefty, rightx, righty, out_img = find_lane_pixels(binary_warped)
-    print('fit_polynomial')
-    ### TO-DO: Fit a second order polynomial to each using `np.polyfit` ###
+    # Fitting a second order polynomial to each using `np.polyfit` #
     left_fit = np.polyfit(lefty*ym_per_pix,leftx*xm_per_pix,2)
     right_fit = np.polyfit(righty*ym_per_pix,rightx*xm_per_pix,2)
     
-    # Generate x and y values for plotting
+    # Generating x and y values for plotting
     ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
     try:
         left_fitx = np.poly1d(left_fit)(ploty)
@@ -212,11 +220,9 @@ def measure_curvature_pixels(binary_warped,ploty,left_fit,right_fit,leftx, lefty
     '''
     ym_per_pix = 30/720 # meters per pixel in y dimension
     xm_per_pix = 3.7/700 # meters per pixel in x dimension
-    print('measure_curvature_pixels')
-    print(str(leftx) + ' ' + str(lefty) + '  ' +  str(rightx) + '  ' + str(righty))
     ploty, left_fit, right_fit, _,_ = fit_polynomial(binary_warped,leftx, lefty, rightx, righty,ym_per_pix,xm_per_pix)
     
-    # Define y-value where we want radius of curvature
+    # Defining y-value where we want radius of curvature
     # We'll choose the maximum y-value, corresponding to the bottom of the image
     y_eval = np.max(ploty)
     
@@ -226,27 +232,26 @@ def measure_curvature_pixels(binary_warped,ploty,left_fit,right_fit,leftx, lefty
     
     return left_curverad, right_curverad
 
-def draw_lanes(undist,img_size,Minv,warped,ploty,left_fitx,right_fitx,left_curverad, right_curverad):
-    # Create an image to draw the lines on
+def draw_lanes(undist,ingimg_size,Minv,warped,ploty,left_fitx,right_fitx,left_curverad, right_curverad,offset=0):
+    # Creat an image to draw the lines on
     warp_zero = np.zeros_like(warped).astype(np.uint8)
     color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
 
-    # Recast the x and y points into usable format for cv2.fillPoly()
+    # Recasting the x and y points into usable format for cv2.fillPoly()
     pts_left = np.array([np.transpose(np.vstack([left_fitx, ploty]))])
     pts_right = np.array([np.flipud(np.transpose(np.vstack([right_fitx, ploty])))])
     pts = np.hstack((pts_left, pts_right))
 
-    # Draw the lane onto the warped blank image
+    # Drawing the lane onto the warped blank image
     cv2.fillPoly(color_warp, np.int_([pts]), (0,255, 0))
     
-    # Warp the blank back to original image space using inverse perspective matrix (Minv)
+    # Warping the blank back to original image space using inverse perspective matrix (Minv)
     newwarp = cv2.warpPerspective(color_warp, Minv, img_size) 
     # Combine the result with the original image
     result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
-    # Display the curvature values
-    offset = 0.29
+    # Displaying the curvature values
     curvature_text = 'Left Curve Rad. : ' + str(left_curverad) + ' mts   Right Curve Rad. : ' + str(right_curverad) + ' mts'
-    offset_text = 'Offset from center : ' + str(offset)
+    offset_text = 'Offset from center : ' + str(offset) + ' mts'
     cv2.putText(result,curvature_text,(100,50), cv2.FONT_HERSHEY_SIMPLEX, 1,(0,0,255),2,cv2.LINE_AA)
     cv2.putText(result,offset_text,(200,100), cv2.FONT_HERSHEY_SIMPLEX, 1,(0,0,255),2,cv2.LINE_AA)
     plt.imshow(result)
@@ -265,9 +270,10 @@ def pipeline(img):
     warped = cv2.warpPerspective(undist, M, img_size,flags=cv2.INTER_LINEAR) # Warp perspective to change the perspective into Bird's eye view 
     binary_warped = gradient_color_threshold(warped) # Using the color and grandient thresholds to find the lane lines under different conditions
     leftx, lefty, rightx, righty, _ = find_lane_pixels(binary_warped)
+    offset = get_offset(binary_warped,xm_per_pix)
     ploty, left_fit, right_fit,left_fitx,right_fitx = fit_polynomial(binary_warped,leftx, lefty, rightx, righty) # Find the lanes from the binay image and fit the polynomial curve
     left_curverad, right_curverad = measure_curvature_pixels(binary_warped,ploty,left_fit,right_fit,leftx, lefty, rightx, righty) # Calculate the curvature radius of both left and right lane curves
-    out_img = draw_lanes(undist,img_size,Minv,binary_warped,ploty,left_fitx,right_fitx,round(left_curverad), round(right_curverad)) # Draw the lanes and the curvature radius on the image frame
+    out_img = draw_lanes(undist,img_size,Minv,binary_warped,ploty,left_fitx,right_fitx,round(left_curverad), round(right_curverad),str(round(offset,2))) # Draw the lanes and the curvature radius on the image frame
     #print(str(left_curverad) + ' ' + str(right_curverad))
     return out_img
 def pipeline_test(img,img_name):
@@ -280,12 +286,18 @@ def pipeline_test(img,img_name):
     cv2.imwrite(os.path.join('output_images/warp_images',img_name),warped)
     binary_warped = gradient_color_threshold(warped) # Using the color and grandient thresholds to find the lane lines under different conditions
     cv2.imwrite(os.path.join('output_images/binary_images',img_name),binary_warped.astype('uint8') * 255)
-    leftx, lefty, rightx, righty, _ = find_lane_pixels(binary_warped)
+    leftx, lefty, rightx, righty, sli_img = find_lane_pixels(binary_warped)
+    plt.imsave(os.path.join('output_images/sliding_window',img_name),sli_img)
     ploty, left_fit, right_fit,left_fitx,right_fitx = fit_polynomial(binary_warped,leftx, lefty, rightx, righty) # Find the lanes from the binay image and fit the polynomial curve
+    # Plots the left and right polynomials on the lane lines
+#     plt.plot(left_fitx, ploty, color='yellow')
+#     plt.plot(right_fitx, ploty, color='yellow')
     left_curverad, right_curverad = measure_curvature_pixels(binary_warped,ploty,left_fit,right_fit,leftx, lefty, rightx, righty) # Calculate the curvature radius of both left and right lane curves
     out_img = draw_lanes(undist,img_size,Minv,binary_warped,ploty,left_fitx,right_fitx,round(left_curverad), round(right_curverad)) # Draw the lanes and the curvature radius on the image frame
     #print(str(left_curverad) + ' ' + str(right_curverad))
     return out_img
+###########################################################################################################################################
+###########################################################################################################################################
 
 def fit_poly(img_shape, leftx, lefty, rightx, righty):
      # Fitting a second order polynomial to each with np.polyfit()
@@ -311,7 +323,7 @@ def search_around_poly(binary_warped,left_fit,right_fit):
     # HYPERPARAMETER
     # Choose the width of the margin around the previous polynomial to search
     # The quiz grader expects 100 here, but feel free to tune on your own!
-    margin = 150
+    margin = 100
     print('search_around_poly')
     # Grab activated pixels
     nonzero = binary_warped.nonzero()
